@@ -1,10 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ensure consistent locale settings
+export LC_ALL=C
+export LANG=C
+
 # Script Title: File Manager with Limit and Logging
 # Description: Ensures only a specified number of large files remain in a directory, with logging and dry run functionality.
 # Author: elvee
-# Version: 0.2.1
+# Version: 0.2.2
 # License: MIT
 # Creation Date: 26-11-2024
 # Last Modified: 27-04-2024
@@ -74,6 +78,17 @@ initialize_logging() {
   LOG_FILE="$DEFAULT_LOG_DIR/dir-mon-$(date '+%Y%m%d-%H%M%S').log"
   echo "Log file initialized: $LOG_FILE"
   echo "$(date '+%Y-%m-%d %H:%M:%S') Script started." > "$LOG_FILE"
+}
+
+# Function: Check Date Compatibility
+check_date_compatibility() {
+  # Test if 'date +%s' works
+  if ! date +%s >/dev/null 2>&1; then
+    error_exit "'date +%s' is not supported on this system."
+  fi
+
+  # Test specific format
+  test_date=$(date '+%Y-%m-%d %H:%M:%S') || error_exit "'date' command failed with format '+%Y-%m-%d %H:%M:%S'."
 }
 
 # Function: Clean Large Files
@@ -232,10 +247,22 @@ main_logic() {
   done
 }
 
+# Function: Check Date Compatibility
+check_date_compatibility() {
+  # Test if 'date +%s' works
+  if ! date +%s >/dev/null 2>&1; then
+    error_exit "'date +%s' is not supported on this system."
+  fi
+
+  # Test specific format
+  test_date=$(date '+%Y-%m-%d %H:%M:%S') || error_exit "'date' command failed with format '+%Y-%m-%d %H:%M:%S'."
+}
+
 # Main Function
 main() {
   print_ascii_art
   initialize_logging
+  check_date_compatibility
   main_logic "$@"
   echo "$(date '+%Y-%m-%d %H:%M:%S') Script finished." >> "$LOG_FILE"
 }
