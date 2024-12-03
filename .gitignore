@@ -1,0 +1,15 @@
+# Ignore everything
+*
+.*
+
+# But not these files...
+!.gitignore
+!README.md
+!dir-mon.sh
+!LICENSE
+
+# Even if they are in subdirectories
+!*/
+
+# But still ignore everything in subdirectories
+/**/ 
