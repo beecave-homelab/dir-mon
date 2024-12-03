@@ -17,9 +17,9 @@ export LANG=C
 # Constants
 DEFAULT_INTERVAL=600                 # Default interval in seconds (10 minutes)
 DEFAULT_FILE_SIZE_GB=2               # Default file size threshold in GB
-DEFAULT_FILE_SIZE_MB=0               # Default file size threshold in MB
+DEFAULT_FILE_SIZE_MB=100              # Default file size threshold in MB
 DEFAULT_FILE_COUNT=1                 # Default number of files allowed to exceed the limit
-DEFAULT_LOG_DIR="${PWD}"             # Default directory for saving logs
+DEFAULT_LOG_DIR="${PWD}/logs"             # Default directory for saving logs
 
 # Global Variables
 LOG_FILE=""
@@ -98,32 +98,49 @@ clean_large_files() {
   local max_files="$3"
   local dry_run="$4"
 
-  # Find files larger than the specified size and sort by modification time
-  readarray -t files < <(find "$dir" -type f -size +"${min_size}"c -printf "%T@ %p\n" | sort -nr | awk '{print substr($0, index($0,$2))}')
-
+  # Create a temporary file to store the file list
+  local tmp_file
+  tmp_file=$(mktemp)
+  
+  # Find files larger than the specified size and get their modification times
+  # Using BSD-compatible commands
+  find "$dir" -type f -size +"${min_size}"c -exec stat -f "%m %N" {} \; | sort -nr > "$tmp_file"
+  
+  # Count the number of files
+  local file_count
+  file_count=$(wc -l < "$tmp_file")
+  
   # Keep only the specified number of most recent files
-  if (( ${#files[@]} > max_files )); then
-    for ((i = max_files; i < ${#files[@]}; i++)); do
-      if [[ "$dry_run" == "true" ]]; then
-        echo "Dry run: Would delete ${files[$i]}"
-        echo "$(date '+%Y-%m-%d %H:%M:%S') Dry run: Would delete ${files[$i]}" >> "$LOG_FILE"
-      else
-        echo "Deleting: ${files[$i]}"
-        echo "$(date '+%Y-%m-%d %H:%M:%S') Deleting: ${files[$i]}" >> "$LOG_FILE"
-        rm -f "${files[$i]}"
+  if (( file_count > max_files )); then
+    local i=0
+    while IFS= read -r line; do
+      file=$(echo "$line" | cut -d' ' -f2-)
+      ((i++))
+      if (( i > max_files )); then
+        if [[ "$dry_run" == "true" ]]; then
+          echo "Dry run: Would delete $file"
+          echo "$(date '+%Y-%m-%d %H:%M:%S') Dry run: Would delete $file" >> "$LOG_FILE"
+        else
+          echo "Deleting: $file"
+          echo "$(date '+%Y-%m-%d %H:%M:%S') Deleting: $file" >> "$LOG_FILE"
+          rm -f "$file"
+        fi
       fi
-    done
+    done < "$tmp_file"
   else
-    echo "No action required. Number of large files (${#files[@]}) is within the limit ($max_files)."
+    echo "No action required. Number of large files ($file_count) is within the limit ($max_files)."
     echo "$(date '+%Y-%m-%d %H:%M:%S') No action required. Files within limit." >> "$LOG_FILE"
   fi
+  
+  # Clean up temporary file
+  rm -f "$tmp_file"
 }
 
 # Function: Main Logic
 main_logic() {
   local target_dir=""
-  local size_mb=$DEFAULT_FILE_SIZE_MB
-  local size_gb=$DEFAULT_FILE_SIZE_GB
+  local size_mb=0
+  local size_gb=0
   local max_files=$DEFAULT_FILE_COUNT
   local monitor_duration=0
   local dry_run="false"
@@ -213,6 +230,11 @@ main_logic() {
   # Enforce mutual exclusivity of size options
   if (( size_mb > 0 && size_gb > 0 )); then
     error_exit "Please specify only one of --size-in-mb or --size-in-gb."
+  fi
+
+  # If no size is specified, use default MB
+  if (( size_mb == 0 && size_gb == 0 )); then
+    size_mb=$DEFAULT_FILE_SIZE_MB
   fi
 
   # Calculate size threshold in bytes
